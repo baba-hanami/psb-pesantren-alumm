@@ -3749,6 +3749,9 @@
                             <th class="p-3.5">Nilai</th>
                           </template>
                           <template x-if="examCoordinatorData.examType === 'CBT'">
+                            <th class="p-3.5">Bahasa Arab (MA)</th>
+                          </template>
+                          <template x-if="examCoordinatorData.examType === 'CBT'">
                             <th class="p-3.5">Rekomendasi</th>
                           </template>
                           <template x-if="examCoordinatorData.examType === 'CBT'">
@@ -3781,6 +3784,7 @@
                               <span class="font-bold text-slate-800" x-text="st.jenjang + ' (' + st.jenisKelamin + ')'"></span>
                             </td>
                             <td class="p-3.5 font-mono font-bold text-slate-800" x-text="(getStudentExamResult(st.regNo) ? getStudentExamResult(st.regNo).score : '-')"></td>
+                            <td class="p-3.5 font-mono font-bold text-slate-800" x-text="(getStudentCbtArabicScore(st.regNo) ? getStudentCbtArabicScore(st.regNo) : (st.jenjang === 'MA' ? '-' : 'N/A'))"></td>
                             <td class="p-3.5">
                               <span x-show="getStudentExamResult(st.regNo)" class="px-2.5 py-1 rounded-full text-[10px] font-extrabold uppercase border"
                                     :class="getStudentExamResult(st.regNo) && getStudentExamResult(st.regNo).recommendation === 'LULUS' ? 'bg-emerald-50 text-emerald-800 border-emerald-200' : 'bg-rose-50 text-rose-800 border-rose-200'"
@@ -8241,6 +8245,7 @@
         students: [],
         results: [],
         cbtCredentials: [],
+        cbtArabicScores: [],
         stats: { totalStudents: 0, completedCount: 0, pendingCount: 0 },
         vendorInfo: { spreadsheetUrl: '', lastPush: '', lastPull: '' }
       },
@@ -8542,6 +8547,16 @@
         for (var i = 0; i < this.examCoordinatorData.cbtCredentials.length; i++) {
           if (this.examCoordinatorData.cbtCredentials[i].regNo === regNo) {
             return this.examCoordinatorData.cbtCredentials[i];
+          }
+        }
+        return null;
+      },
+
+      getStudentCbtArabicScore(regNo) {
+        if (!this.examCoordinatorData || !this.examCoordinatorData.cbtArabicScores) return null;
+        for (var i = 0; i < this.examCoordinatorData.cbtArabicScores.length; i++) {
+          if (this.examCoordinatorData.cbtArabicScores[i].regNo === regNo) {
+            return this.examCoordinatorData.cbtArabicScores[i].score;
           }
         }
         return null;
