@@ -3963,6 +3963,12 @@
                  x-text="getPlenoExamData('CBT').score"></div>
             <div class="space-y-1">
               <div class="text-base font-extrabold text-slate-900">Tes CBT</div>
+              <template x-if="String(getCurrentPlenoStudent().jenjang || '').toUpperCase().startsWith('MA')">
+                <div class="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-indigo-50 border border-indigo-200 text-xs font-bold text-indigo-900">
+                  <span class="text-[10px] text-indigo-600 uppercase">Nilai B. Arab:</span>
+                  <span class="font-mono font-black text-sm" x-text="getCurrentPlenoStudent().cbtArabicScore || (getPlenoExamData('BAHASA_ARAB').score !== '-' ? getPlenoExamData('BAHASA_ARAB').score : '-')"></span>
+                </div>
+              </template>
               <div class="text-xs font-bold"
                    :class="getPlenoExamData('CBT').recommendation === 'LULUS' ? 'text-emerald-700' : 'text-slate-600'"
                    x-text="'Rekomendasi: ' + getPlenoExamData('CBT').recommendation"></div>
@@ -4419,15 +4425,23 @@
                               class="w-full pl-9 pr-3 py-2 rounded-xl text-xs border border-slate-300 bg-slate-50 focus:bg-white focus:border-indigo-700 focus:outline-none font-semibold">
                      </div>
 
-                     <button type="button"
-                             @click="openPlenoMode()"
-                             :disabled="isSubmitting || getFilteredChairmanPleno().length === 0"
-                             class="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-sm transition disabled:opacity-40 flex-shrink-0">
-                       <i data-lucide="presentation" class="w-4 h-4"></i>
-                       <span>Mode Pleno</span>
-                     </button>
-                   </div>
-                 </div>
+                      <button type="button"
+                              @click="openPlenoMode()"
+                              :disabled="isSubmitting || getFilteredChairmanPleno().length === 0"
+                              class="px-4 py-2 rounded-xl bg-amber-400 hover:bg-amber-500 text-slate-950 font-extrabold text-xs flex items-center gap-2 shadow-sm transition disabled:opacity-40 flex-shrink-0">
+                        <i data-lucide="presentation" class="w-4 h-4"></i>
+                        <span>Mode Pleno</span>
+                      </button>
+
+                      <button type="button"
+                              @click="exportPlenoResults()"
+                              :disabled="isSubmitting"
+                              class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center gap-2 shadow-sm transition disabled:opacity-40 flex-shrink-0">
+                        <i data-lucide="file-spreadsheet" class="w-4 h-4"></i>
+                        <span>Export Excel</span>
+                      </button>
+                    </div>
+                  </div>
 
                  <!-- Baris 2: Dropdown Filter-Filter -->
                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t border-slate-100 text-xs">
@@ -9240,10 +9254,111 @@
         },
 
         getExamResultSummary(st) {
-          if (!st.examResults || !st.examResults.length) return '-';
-          return st.examResults.map(function(r) {
-            return r.examType + ': Nilai ' + (r.score || '-') + ' | Rekomendasi ' + (r.recommendation || '-') + ' | Catatan: ' + (r.notes || '-');
-          }).join('\n');
+          var lines = [];
+          if (String(st.jenjang || '').toUpperCase().startsWith('MA') && st.cbtArabicScore) {
+            lines.push('CBT Bahasa Arab: Nilai ' + st.cbtArabicScore);
+          }
+          if (st.examResults && st.examResults.length) {
+            st.examResults.forEach(function(r) {
+              lines.push(r.examType + ': Nilai ' + (r.score || '-') + ' | Rekomendasi ' + (r.recommendation || '-') + ' | Catatan: ' + (r.notes || '-'));
+            });
+          }
+          return lines.length ? lines.join('\n') : '-';
+        },
+
+        exportPlenoResults() {
+          var self = this;
+          if (!this.currentUser) return;
+
+          this.isSubmitting = true;
+          this.postRequest('exportPlenoResults', { staffRegNo: this.currentUser.regNo })
+            .then(function(res) {
+              if (!res.ok || !res.data || !res.data.groups) {
+                self.showToast(res.message || 'Gagal mengekspor data pleno.');
+                self.isSubmitting = false;
+                return;
+              }
+
+              var loadSheetJs = function() {
+                return new Promise(function(resolve, reject) {
+                  if (window.XLSX) {
+                    resolve(window.XLSX);
+                    return;
+                  }
+                  var script = document.createElement('script');
+                  script.src = 'https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js';
+                  script.async = true;
+                  script.onload = function() { resolve(window.XLSX); };
+                  script.onerror = function() { reject(new Error('Gagal memuat library SheetJS.')); };
+                  document.head.appendChild(script);
+                });
+              };
+
+              loadSheetJs()
+                .then(function(XLSX) {
+                  var wb = XLSX.utils.book_new();
+                  var headers = [
+                    'No', 'Tanggal Tes Wawancara', 'No Reg', 'Nama',
+                    'Nilai CBT', 'Rekomendasi CBT', 'Catatan CBT',
+                    'Nilai Tes Quran', 'Rekomendasi Tes Quran', 'Catatan Tes Quran',
+                    'Nilai Wawancara Umum', 'Rekomendasi Wawancara Umum', 'Catatan Wawancara Umum',
+                    'Nilai Wawancara Spiritual', 'Rekomendasi Wawancara Spiritual', 'Catatan Wawancara Spiritual',
+                    'Nilai Bahasa Arab', 'Status Kelulusan Pleno', 'Catatan Pleno'
+                  ];
+
+                  var sheetNames = {
+                    'SMP_PA': 'SMP Putra',
+                    'SMP_PI': 'SMP Putri',
+                    'MA_PA': 'MA Putra',
+                    'MA_PI': 'MA Putri'
+                  };
+
+                  var keys = ['SMP_PA', 'SMP_PI', 'MA_PA', 'MA_PI'];
+
+                  keys.forEach(function(key) {
+                    var list = res.data.groups[key] || [];
+                    var rows = list.map(function(item, idx) {
+                      return {
+                        'No': idx + 1,
+                        'Tanggal Tes Wawancara': item.interviewDate || '-',
+                        'No Reg': item.regNo,
+                        'Nama': item.namaLengkap,
+                        'Nilai CBT': item.cbt.score,
+                        'Rekomendasi CBT': item.cbt.recommendation,
+                        'Catatan CBT': item.cbt.notes,
+                        'Nilai Tes Quran': item.quran.score,
+                        'Rekomendasi Tes Quran': item.quran.recommendation,
+                        'Catatan Tes Quran': item.quran.notes,
+                        'Nilai Wawancara Umum': item.wawancaraUmum.score,
+                        'Rekomendasi Wawancara Umum': item.wawancaraUmum.recommendation,
+                        'Catatan Wawancara Umum': item.wawancaraUmum.notes,
+                        'Nilai Wawancara Spiritual': item.wawancaraSpiritual.score,
+                        'Rekomendasi Wawancara Spiritual': item.wawancaraSpiritual.recommendation,
+                        'Catatan Wawancara Spiritual': item.wawancaraSpiritual.notes,
+                        'Nilai Bahasa Arab': item.bahasaArab,
+                        'Status Kelulusan Pleno': item.admissionStatus,
+                        'Catatan Pleno': item.admissionNote
+                      };
+                    });
+
+                    var ws = XLSX.utils.json_to_sheet(rows, { header: headers });
+                    XLSX.utils.book_append_sheet(wb, ws, sheetNames[key]);
+                  });
+
+                  XLSX.writeFile(wb, 'Hasil_Pleno_PSB_' + new Date().toISOString().slice(0,10) + '.xlsx');
+                  self.showToast('Data pleno berhasil diekspor.', 'success');
+                })
+                .catch(function(err) {
+                  self.showToast(err.message || 'Gagal memuat library Excel.');
+                })
+                .finally(function() {
+                  self.isSubmitting = false;
+                });
+            })
+            .catch(function(err) {
+              self.isSubmitting = false;
+              self.showToast(err.message || 'Gagal mengekspor data pleno.');
+            });
         },
 
         toggleChairmanSelect(regNo) {
